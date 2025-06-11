@@ -21,7 +21,7 @@
             border-radius: 0.5rem; /* rounded corners */
             display: block; /* Remove extra space below canvas */
             width: 100%; /* Make canvas responsive */
-            height: 400px; /* Fixed height, but width is fluid */
+            height: 400px; /* Fixed height, but will adapt to screen ratio */
             box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.3);
             image-rendering: optimizeSpeed; /* Optimize rendering for moving elements */
             image-rendering: -webkit-optimize-contrast;
@@ -126,17 +126,18 @@
 
         // --- Firebase Configuration ---
         // These are global variables provided by the Canvas environment.
-        // DO NOT remove or modify these lines.
+        // DO NOT remove or modify these lines unless absolutely necessary.
+        // For a deployed GitHub Pages site, you MUST manually paste your firebaseConfig here.
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
-            // Your Firebase Config goes here
-            // Example structure (replace with your actual config):
-            // apiKey: "YOUR_API_KEY",
-            // authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
-            // projectId: "YOUR_PROJECT_ID",
-            // storageBucket: "YOUR_PROJECT_ID.appspot.com",
-            // messagingSenderId: "YOUR_SENDER_ID",
-            // appId: "YOUR_APP_ID"
+        const firebaseConfig = {
+            // YOUR FIREBASE CONFIG GOES HERE
+            // Example:
+            // apiKey: "AIzaSy...",
+            // authDomain: "your-project-id.firebaseapp.com",
+            // projectId: "your-project-id",
+            // storageBucket: "your-project-id.appspot.com",
+            // messagingSenderId: "...",
+            // appId: "1:..."
         };
 
         // --- Initialize Firebase Services ---
@@ -159,7 +160,7 @@
             match /artifacts/{appId}/public/simulationState/{simulationId} {
               allow read;
               // Only the owner can write to the main simulation state
-              allow write: if request.auth != null && request.auth.uid == "$(OWNER_UID)";
+              allow write: if request.auth != null && request.auth.uid == "$(OWNER_UID)"; // IMPORTANT: Replace OWNER_UID in the rules
             }
 
             // Private user data (if you later want per-user saves)
@@ -184,6 +185,7 @@
         // Simulation state
         let particles = []; // Array of Particle objects (food)
         let protoCells = []; // Array of ProtoCell objects
+        let totalOrganisms = []; // Will hold bonded Organisms later
         let currentGeneration = 0; // Current generation in the active run
         let totalGenerationsCompleted = 0; // Cumulative total generations processed
         let totalSimSeconds = 0; // Cumulative total simulation time in seconds
@@ -239,12 +241,13 @@
             }
         }
 
-        /** Handles authentication state changes. */
+        /** Handles authentication state changes. This is called on page load and whenever auth state changes. */
         onAuthStateChanged(auth, async (user) => {
             if (user) {
                 currentUserId = user.uid;
                 userIdDisplay.textContent = user.uid;
-                isOwner = (user.uid === OWNER_UID);
+                isOwner = (user.uid === OWNER_UID); // Check if current user is the predefined owner
+
                 ownerStatusDisplay.textContent = isOwner ? "Owner (Write Access)" : "Observer (Read Only)";
                 googleSignInButton.classList.add('hidden');
                 signOutButton.classList.remove('hidden');
@@ -252,12 +255,17 @@
                 loadButton.disabled = !isOwner;
                 showMessage(`Welcome, ${isOwner ? 'Owner' : 'Observer'}!`, 'info');
 
-                // If owner, try to load previous state
+                // If owner, try to load previous state when they sign in
                 if (isOwner) {
                     await loadSimulationState();
+                } else {
+                    // For observers, load the latest public state
+                    // This will be read-only as per Firestore rules
+                    await loadSimulationState(true); // 'true' indicates observer mode for loading
                 }
 
             } else {
+                // User is signed out or no user is signed in
                 currentUserId = null;
                 isOwner = false;
                 userIdDisplay.textContent = "N/A";
@@ -268,8 +276,7 @@
                 loadButton.disabled = true;
                 showMessage("You are viewing as an anonymous observer.", 'info');
 
-                // Sign in anonymously if not already signed in to allow read access
-                // This ensures all users have an auth token for Firestore rules
+                // Sign in anonymously if not already signed in to allow read access for Firestore rules
                 try {
                     await signInAnonymously(auth);
                 } catch (error) {
@@ -324,7 +331,7 @@
                 avgFoodDisplay.textContent = '0.00';
                 maxFoodDisplay.textContent = '0';
             }
-            // userIdDisplay and ownerStatusDisplay are updated by onAuthStateChanged
+            // userIdDisplay and ownerStatusDisplay are updated by onAuthStateChanged, so no need here
         }
 
         /** Resizes canvas to fit its container responsively. */
@@ -351,7 +358,7 @@
                 if (pc.energy <= 0) return; // Don't draw dead proto-cells
 
                 const energyRatio = pc.energy / pc.maxEnergy;
-                const color = `rgba(${Math.floor((1 - energyRatio) * 255)}, ${Math.floor(energyRatio * 255)}, 0, 0.8)`; // Red to Green based on energy
+                const color = `rgba(${Math.floor((1 - energyRatio) * 255)}, ${Math.floor(energyRatio * 255)}, 0, 0.8)`; // Red (low) to Green (high) based on energy
                 ctx.fillStyle = color;
                 ctx.beginPath();
                 ctx.arc(pc.x, pc.y, 6, 0, Math.PI * 2); // ProtoCell circle
@@ -387,13 +394,13 @@
                 this.id = id;
                 this.x = Math.random() * canvas.width;
                 this.y = Math.random() * canvas.height;
-                this.vx = (Math.random() - 0.5) * 2;
+                this.vx = (Math.random() - 0.5) * 2; // Initial random velocity
                 this.vy = (Math.random() - 0.5) * 2;
                 this.maxEnergy = 100;
                 this.energy = this.maxEnergy;
                 this.foodConsumed = 0;
 
-                // Genes: [speed_multiplier, sensory_range, turning_responsiveness, metabolism_multiplier, preferred_type_index]
+                // Genes: [speed_multiplier, sensory_range_multiplier, turning_responsiveness, metabolism_multiplier]
                 // Each gene is normalized between 0 and 1
                 this.genes = genes || [
                     Math.random(), // gene[0]: speed (0-1)
@@ -403,18 +410,20 @@
                 ];
 
                 this.composition = composition || []; // Array of Particles that formed this ProtoCell (for detailed vision)
-                this.preferredParticleTypeIndex = Math.floor(this.genes[3] * 3); // Based on a gene for now, e.g., 0=food, 1=repel, 2=bond
+                // this.preferredParticleTypeIndex = Math.floor(this.genes[3] * 3); // Example for a gene influencing preference
 
                 // Derived properties from genes
                 this.speed = 1 + this.genes[0] * 2; // Speed from 1 to 3
                 this.sensoryRange = 50 + this.genes[1] * 100; // Range from 50 to 150
                 this.turnFactor = 0.05 + this.genes[2] * 0.1; // Turn factor from 0.05 to 0.15
                 this.metabolism = protoCellMetabolismRate * (0.5 + this.genes[3]); // Metabolism influenced by gene
+
+                this.isBonded = false; // To be used when Organisms are introduced
             }
 
             update() {
                 if (this.energy <= 0) {
-                    this.energy = 0; // Ensure energy doesn't go negative
+                    this.energy = 0;
                     return; // Dead proto-cells don't move or interact
                 }
 
@@ -422,27 +431,26 @@
                 this.energy -= this.metabolism;
 
                 // --- Simple Decision Logic based on Genes ---
-                let targetX = this.x + this.vx;
-                let targetY = this.y + this.vy;
+                let targetVx = this.vx;
+                let targetVy = this.vy;
 
-                // Find nearest particle of preferred type within sensory range
-                let nearestPreferredParticle = null;
+                // Find nearest particle of 'food' type within sensory range
+                let nearestFoodParticle = null;
                 let minDistance = Infinity;
 
                 for (let i = particles.length - 1; i >= 0; i--) {
                     const p = particles[i];
-                    // Example: Only prefer 'food' particles for now
-                    if (p.type === 'food') {
+                    if (p.type === 'food') { // Only seek 'food' for now
                         const dist = Math.sqrt(Math.pow(this.x - p.x, 2) + Math.pow(this.y - p.y, 2));
                         if (dist < minDistance && dist < this.sensoryRange) {
                             minDistance = dist;
-                            nearestPreferredParticle = p;
+                            nearestFoodParticle = p;
                         }
                     }
                 }
 
-                if (nearestPreferredParticle) {
-                    // Steer towards preferred particle
+                if (nearestFoodParticle) {
+                    // Steer towards food
                     let dx = nearestPreferredParticle.x - this.x;
                     let dy = nearestPreferredParticle.y - this.y;
                     const magnitude = Math.sqrt(dx * dx + dy * dy);
@@ -451,36 +459,42 @@
                         dy /= magnitude;
                     }
 
-                    // Apply turning responsiveness
-                    this.vx = (1 - this.turnFactor) * this.vx + this.turnFactor * (dx * this.speed);
-                    this.vy = (1 - this.turnFactor) * this.vy + this.turnFactor * (dy * this.speed);
+                    // Apply turning responsiveness to gradually change velocity
+                    targetVx = (1 - this.turnFactor) * this.vx + this.turnFactor * (dx * this.speed);
+                    targetVy = (1 - this.turnFactor) * this.vy + this.turnFactor * (dy * this.speed);
                 } else {
-                    // Wander if no preferred particle in range (slight random walk)
-                    this.vx += (Math.random() - 0.5) * 0.2;
-                    this.vy += (Math.random() - 0.5) * 0.2;
-                    // Clamp speed
-                    const currentSpeed = Math.sqrt(this.vx * this.vx + this.vy * this.vy);
-                    if (currentSpeed > this.speed) {
-                        this.vx = (this.vx / currentSpeed) * this.speed;
-                        this.vy = (this.vy / currentSpeed) * this.speed;
-                    }
+                    // Wander if no food in range (slight random walk)
+                    targetVx += (Math.random() - 0.5) * 0.2;
+                    targetVy += (Math.random() - 0.5) * 0.2;
                 }
+
+                // Clamp velocity to prevent excessive speed, then update actual velocity
+                const currentSpeed = Math.sqrt(targetVx * targetVx + targetVy * targetVy);
+                if (currentSpeed > this.speed) {
+                    this.vx = (targetVx / currentSpeed) * this.speed;
+                    this.vy = (targetVy / currentSpeed) * this.speed;
+                } else {
+                    this.vx = targetVx;
+                    this.vy = targetVy;
+                }
+
 
                 // Update position
                 this.x += this.vx;
                 this.y += this.vy;
 
-                // Keep proto-cells within canvas bounds and bounce
-                if (this.x < 0 || this.x > canvas.width) this.vx *= -1;
-                if (this.y < 0 || this.y > canvas.height) this.vy *= -1;
-                this.x = Math.max(0, Math.min(canvas.width, this.x));
-                this.y = Math.max(0, Math.min(canvas.height, this.y));
+                // Keep proto-cells within canvas bounds and bounce off edges
+                if (this.x < 0) { this.x = 0; this.vx *= -1; }
+                if (this.x > canvas.width) { this.x = canvas.width; this.vx *= -1; }
+                if (this.y < 0) { this.y = 0; this.vy *= -1; }
+                if (this.y > canvas.height) { this.y = canvas.height; this.vy *= -1; }
+
 
                 // Check for Particle consumption
                 for (let i = particles.length - 1; i >= 0; i--) {
                     const p = particles[i];
                     const dist = Math.sqrt(Math.pow(this.x - p.x, 2) + Math.pow(this.y - p.y, 2));
-                    if (dist < 10) { // If close to particle (collision detection)
+                    if (dist < 10) { // If close enough to particle (collision detection)
                         this.foodConsumed += p.value;
                         this.energy = Math.min(this.maxEnergy, this.energy + p.value * 20); // Gain energy from particle
                         particles.splice(i, 1); // Remove consumed particle
@@ -489,7 +503,7 @@
             }
 
             getFitness() {
-                // Fitness is based on food consumed and energy remaining
+                // Fitness is based on food consumed and energy remaining (rewards survival)
                 return this.foodConsumed + (this.energy > 0 ? this.energy * 0.1 : 0);
             }
         }
@@ -501,6 +515,7 @@
             // Clear existing entities
             particles = [];
             protoCells = [];
+            totalOrganisms = []; // Clear organisms too
             lastGenerationFoodConsumed = [];
 
             // Create initial particles (food)
@@ -529,34 +544,36 @@
 
             lastGenerationFoodConsumed = livingProtoCells.map(pc => pc.foodConsumed); // Store for stats
 
-            if (livingProtoCells.length === 0 && currentGeneration > 0) { // Don't reset on initial empty gen
+            // If no living proto-cells, reset or show error (unless it's the very first generation)
+            if (livingProtoCells.length === 0 && totalGenerationsCompleted > 0) {
                 showMessage("All ProtoCells died! Resetting simulation.", 'error');
                 resetSimulation();
                 return;
             }
 
             const newProtoCells = [];
-            // Elitism: Keep a percentage of the fittest proto-cells
+            // Elitism: Keep a percentage of the fittest proto-cells directly
             const numElites = Math.max(1, Math.floor(populationSize * 0.05)); // Keep at least 1 elite
             for (let i = 0; i < numElites; i++) {
                 if (livingProtoCells[i]) {
-                    const eliteGenes = [...livingProtoCells[i].genes];
+                    const eliteGenes = [...livingProtoCells[i].genes]; // Copy genes
                     const eliteProtoCell = new ProtoCell(newProtoCells.length, eliteGenes, [...livingProtoCells[i].composition]);
                     eliteProtoCell.energy = eliteProtoCell.maxEnergy; // Re-energize elites
-                    eliteProtoCell.foodConsumed = 0;
+                    eliteProtoCell.foodConsumed = 0; // Reset food consumed for next gen
                     newProtoCells.push(eliteProtoCell);
                 }
             }
 
-            // 2. Reproduction and Mutation
+            // 2. Reproduction and Mutation (Fill the rest of the population)
             const totalFitness = livingProtoCells.reduce((sum, pc) => sum + pc.getFitness(), 0);
 
             while (newProtoCells.length < populationSize) {
                 const parent1 = selectParent(livingProtoCells, totalFitness);
-                const parent2 = selectParent(livingProtoCells, totalFitness); // Simple asexual reproduction for now
+                const parent2 = selectParent(livingProtoCells, totalFitness); // Selecting two for potential crossover
 
-                if (!parent1 || !parent2) { // Fallback in case of selection issues
-                    newProtoCells.push(new ProtoCell(newProtoCells.length, null, [])); // Add random proto-cell
+                // If selection fails due to very low or zero fitness, add random new proto-cell
+                if (!parent1 || !parent2) {
+                    newProtoCells.push(new ProtoCell(newProtoCells.length, null, []));
                     continue;
                 }
 
@@ -639,13 +656,12 @@
                 showMessage("Only the owner can save the simulation state.", 'error');
                 return;
             }
-            if (currentUserId === "YOUR_OWNER_UID_HERE" || !currentUserId) { // Prevent saving if OWNER_UID is placeholder
-                showMessage("Please update OWNER_UID in the code and sign in with your owner account to save.", 'error');
+            if (OWNER_UID === "YOUR_OWNER_UID_HERE" || !currentUserId || currentUserId !== OWNER_UID) {
+                showMessage("Please ensure OWNER_UID is set in the code and you are signed in as the owner.", 'error');
                 return;
             }
 
             try {
-                // Serialize protoCells data (genes, position, energy, etc.)
                 const serializedProtoCells = protoCells.map(pc => ({
                     id: pc.id,
                     x: pc.x,
@@ -653,7 +669,7 @@
                     energy: pc.energy,
                     foodConsumed: pc.foodConsumed,
                     genes: pc.genes,
-                    // composition: pc.composition.map(p => ({type: p.type, x: p.x, y: p.y, value: p.value})) // Only if composition is needed to be saved
+                    // composition: pc.composition.map(p => ({type: p.type, x: p.x, y: p.y, value: p.value})) // Uncomment if composition needed to be saved
                 }));
 
                 const dataToSave = {
@@ -662,9 +678,9 @@
                     totalSimSeconds: totalSimSeconds,
                     timestamp: new Date(),
                     protoCells: serializedProtoCells,
+                    // parameters: { populationSize, particleCount, generationTimeLimit, protoCellMetabolismRate, mutationRate },
                     // You might want to save particle positions if they are persistent,
                     // but for now, they are repopulated each generation.
-                    // particles: particles.map(p => ({type: p.type, x: p.x, y: p.y, value: p.value}))
                 };
 
                 // Use the public collection path for the main simulation state
@@ -677,18 +693,15 @@
             }
         }
 
-        /** Loads the simulation state from Firestore. */
-        async function loadSimulationState() {
-            // Read access is allowed for everyone by rules, but only owner can load to affect simulation state
-            if (!isOwner && auth.currentUser && auth.currentUser.isAnonymous) {
-                showMessage("Observers can view the current state but cannot load a past save to run.", 'info');
+        /** Loads the simulation state from Firestore.
+         * @param {boolean} isObserverMode - True if loading for an observer (read-only, no running).
+         */
+        async function loadSimulationState(isObserverMode = false) {
+            // If it's not the owner and not an observer-initiated load, block
+            if (!isOwner && !isObserverMode) {
+                showMessage("Please sign in as the owner to load a past simulation state to run.", 'error');
                 return;
             }
-            if (!isOwner) { // Double-check for non-owner trying to load
-                 showMessage("Please sign in as the owner to load a past simulation state.", 'error');
-                 return;
-            }
-
 
             try {
                 const simDocRef = doc(db, `artifacts/${appId}/public/simulationState`, SIM_STATE_DOC_ID);
@@ -717,10 +730,19 @@
                     populateParticles();
                     updateDisplay();
                     draw();
-                    showMessage("Simulation state loaded successfully!", 'success');
+                    showMessage(`Simulation state loaded (Gen: ${currentGeneration}).`, 'success');
+
+                    // If loading for an observer, ensure simulation is paused
+                    if (isObserverMode) {
+                        pauseSimulation(true); // 'true' means pause without showing message
+                        startButton.disabled = true; // Observers cannot start
+                        pauseButton.disabled = true;
+                        resetButton.disabled = true;
+                    }
+
                 } else {
-                    showMessage("No saved simulation state found.", 'info');
-                    initializeSimulation(); // Start a new one if no save exists
+                    showMessage("No saved simulation state found. Starting new simulation.", 'info');
+                    initializeSimulation();
                 }
             } catch (error) {
                 console.error("Error loading simulation state:", error);
@@ -774,6 +796,15 @@
         /** Starts or resumes the main simulation. */
         function startSimulation() {
             if (isRunning) return;
+            if (!isOwner && auth.currentUser && auth.currentUser.isAnonymous) {
+                showMessage("Only the owner can start the simulation. You are in observer mode.", 'error');
+                return;
+            }
+            if (!isOwner) { // Double check for non-owner trying to start
+                 showMessage("Please sign in as the owner to start the simulation.", 'error');
+                 return;
+            }
+
 
             isRunning = true;
             startButton.disabled = true;
@@ -791,9 +822,11 @@
             animationFrameId = requestAnimationFrame(animate); // Start the visual animation loop
         }
 
-        /** Pauses the simulation. */
-        function pauseSimulation() {
-            if (!isRunning) return;
+        /** Pauses the simulation.
+         * @param {boolean} silent - If true, no message is shown.
+         */
+        function pauseSimulation(silent = false) {
+            if (!isRunning && !silent) return; // Don't try to pause if not running unless silent
 
             isRunning = false;
             cancelAnimationFrame(animationFrameId); // Stop animation loop
@@ -802,12 +835,14 @@
             startButton.disabled = false;
             pauseButton.disabled = true;
             resetButton.disabled = false;
-            showMessage("Simulation paused.", 'info');
+            if (!silent) {
+                showMessage("Simulation paused.", 'info');
+            }
         }
 
         /** Resets the simulation to its initial state. */
         function resetSimulation() {
-            pauseSimulation(); // Ensure simulation is stopped before resetting
+            pauseSimulation(true); // Ensure simulation is stopped silently before resetting
             currentGeneration = 0;
             totalGenerationsCompleted = 0;
             totalSimSeconds = 0;
@@ -820,6 +855,10 @@
             startButton.disabled = false;
             pauseButton.disabled = true;
             resetButton.disabled = false;
+            // Re-enable save/load based on current owner status, as this is a new session
+            saveButton.disabled = !isOwner;
+            loadButton.disabled = !isOwner;
+
             showMessage("Simulation fully reset. Ready to begin a new journey.", 'info');
         }
 
@@ -842,31 +881,10 @@
         // Initial setup when the page loads
         window.onload = () => {
             resizeCanvas(); // Set initial canvas size
-            // Initial state will be loaded or initialized by onAuthStateChanged
-            // which handles anonymous login or owner login
+            // onAuthStateChanged will handle initial authentication and loading state
+            // No need to call initializeSimulation or loadSimulationState here directly
+            // as onAuthStateChanged will do it after determining user status.
         };
     </script>
 </body>
 </html>
-
-// Import the functions you need from the SDKs you need
-import { initializeApp } from "firebase/app";
-import { getAnalytics } from "firebase/analytics";
-// TODO: Add SDKs for Firebase products that you want to use
-// https://firebase.google.com/docs/web/setup#available-libraries
-
-// Your web app's Firebase configuration
-// For Firebase JS SDK v7.20.0 and later, measurementId is optional
-const firebaseConfig = {
-  apiKey: "AIzaSyAsr6FOvX_CqV0rt7DeVkf7AI7rd7YO2bI",
-  authDomain: "simulating-life.firebaseapp.com",
-  projectId: "simulating-life",
-  storageBucket: "simulating-life.firebasestorage.app",
-  messagingSenderId: "643716990691",
-  appId: "1:643716990691:web:41b8e866660d6a409167d6",
-  measurementId: "G-TF79C60971"
-};
-
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
-const analytics = getAnalytics(app);
