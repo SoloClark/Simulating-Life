@@ -127,9 +127,9 @@
         // --- Firebase Configuration ---
         // These are global variables provided by the Canvas environment.
         // DO NOT remove or modify these lines unless absolutely necessary.
-        // For a deployed GitHub Pages site, you MUST manually paste your firebaseConfig here.
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-        const firebaseConfig = {
+       const OWNER_UID = "YOUR_OWNER_UID_HERE"; // <<< REPLACE THIS WITH YOUR ACTUAL OWNER UID
+let currentUserId = null;
+let isOwner = false;
             // YOUR FIREBASE CONFIG GOES HERE
             // Example:
             // apiKey: "AIzaSy...",
