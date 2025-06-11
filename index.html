@@ -1,0 +1,850 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simulating Life: A Conscious Being Exploration</title>
+    <!-- Tailwind CSS for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Inter font for better aesthetics -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            transition: background-color 0.5s ease-in-out;
+            margin: 0;
+            padding: 0;
+        }
+        canvas {
+            background-color: #1a202c; /* Dark background for visibility */
+            border: 1px solid #4a5568;
+            border-radius: 0.5rem; /* rounded corners */
+            display: block; /* Remove extra space below canvas */
+            width: 100%; /* Make canvas responsive */
+            height: 400px; /* Fixed height, but width is fluid */
+            box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.3);
+            image-rendering: optimizeSpeed; /* Optimize rendering for moving elements */
+            image-rendering: -webkit-optimize-contrast;
+            image-rendering: crisp-edges;
+            image-rendering: pixelated;
+        }
+        .control-button {
+            transition: all 0.2s ease-in-out;
+            transform: translateY(0);
+        }
+        .control-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        .control-button:active {
+            transform: translateY(0);
+            box-shadow: none;
+        }
+    </style>
+</head>
+<body class="bg-gray-800 text-gray-100 flex items-center justify-center min-h-screen p-4">
+    <div class="bg-gray-900 p-8 rounded-lg shadow-2xl max-w-2xl w-full">
+        <h1 class="text-4xl font-bold mb-8 text-center text-blue-400">Simulating Life: A Conscious Being Exploration</h1>
+
+        <!-- Stats Display Area -->
+        <div class="grid grid-cols-2 sm:grid-cols-3 gap-4 mb-6 text-sm sm:text-base">
+            <div class="bg-gray-800 p-3 rounded-md flex justify-between items-center shadow-inner">
+                <span class="text-blue-300 font-semibold">Current Gen:</span>
+                <span id="currentGenDisplay" class="text-blue-100 text-xl font-bold">0</span>
+            </div>
+            <div class="bg-gray-800 p-3 rounded-md flex justify-between items-center shadow-inner">
+                <span class="text-green-300 font-semibold">Total Gens:</span>
+                <span id="totalGenDisplay" class="text-green-100 text-xl font-bold">0</span>
+            </div>
+            <div class="bg-gray-800 p-3 rounded-md flex justify-between items-center shadow-inner">
+                <span class="text-purple-300 font-semibold">Time Left:</span>
+                <span id="timeLeftDisplay" class="text-purple-100 text-xl font-bold">0s</span>
+            </div>
+            <div class="bg-gray-800 p-3 rounded-md flex justify-between items-center shadow-inner">
+                <span class="text-yellow-300 font-semibold">Alive ProtoCells:</span>
+                <span id="aliveProtoCellsDisplay" class="text-yellow-100 text-xl font-bold">0/0</span>
+            </div>
+            <div class="bg-gray-800 p-3 rounded-md flex justify-between items-center shadow-inner col-span-2 sm:col-span-1">
+                <span class="text-red-300 font-semibold">Avg Food (Prev Gen):</span>
+                <span id="avgFoodDisplay" class="text-red-100 text-xl font-bold">0.00</span>
+            </div>
+            <div class="bg-gray-800 p-3 rounded-md flex justify-between items-center shadow-inner col-span-2 sm:col-span-1">
+                <span class="text-pink-300 font-semibold">Max Food (Prev Gen):</span>
+                <span id="maxFoodDisplay" class="text-pink-100 text-xl font-bold">0</span>
+            </div>
+            <div class="bg-gray-800 p-3 rounded-md flex justify-between items-center shadow-inner col-span-2">
+                <span class="text-indigo-300 font-semibold">Total Sim Time:</span>
+                <span id="totalSimTimeDisplay" class="text-indigo-100 text-xl font-bold">0s</span>
+            </div>
+             <div class="bg-gray-800 p-3 rounded-md flex justify-between items-center shadow-inner col-span-2">
+                <span class="text-gray-400 font-semibold">User ID:</span>
+                <span id="userIdDisplay" class="text-gray-300 text-sm font-bold">Authenticating...</span>
+            </div>
+             <div class="bg-gray-800 p-3 rounded-md flex justify-between items-center shadow-inner col-span-2">
+                <span class="text-gray-400 font-semibold">Owner Status:</span>
+                <span id="ownerStatusDisplay" class="text-gray-300 text-sm font-bold">Checking...</span>
+            </div>
+        </div>
+
+        <!-- Canvas for Simulation Visuals -->
+        <canvas id="simulationCanvas" class="mb-6"></canvas>
+
+        <!-- Control Buttons -->
+        <div class="flex flex-col sm:flex-row justify-center space-y-3 sm:space-y-0 sm:space-x-4">
+            <button id="startButton" class="control-button bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-md shadow-lg">
+                Start Simulation
+            </button>
+            <button id="pauseButton" class="control-button bg-yellow-600 hover:bg-yellow-700 text-white font-bold py-3 px-6 rounded-md shadow-lg" disabled>
+                Pause Simulation
+            </button>
+            <button id="resetButton" class="control-button bg-gray-600 hover:bg-gray-700 text-white font-bold py-3 px-6 rounded-md shadow-lg">
+                Reset Simulation
+            </button>
+            <button id="saveButton" class="control-button bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-md shadow-lg" disabled>
+                Save State
+            </button>
+            <button id="loadButton" class="control-button bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 px-6 rounded-md shadow-lg" disabled>
+                Load State
+            </button>
+            <button id="googleSignInButton" class="control-button bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-6 rounded-md shadow-lg">
+                Sign In (Owner)
+            </button>
+             <button id="signOutButton" class="control-button bg-orange-600 hover:bg-orange-700 text-white font-bold py-3 px-6 rounded-md shadow-lg hidden">
+                Sign Out
+            </button>
+        </div>
+
+        <!-- Custom message box for user feedback -->
+        <div id="messageBox" class="mt-6 p-4 rounded-md hidden text-center shadow-md"></div>
+    </div>
+
+    <script type="module">
+        // --- Firebase Imports ---
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, getDoc, setDoc, onSnapshot, collection, query, orderBy, limit } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // --- Firebase Configuration ---
+        // These are global variables provided by the Canvas environment.
+        // DO NOT remove or modify these lines.
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
+            // Your Firebase Config goes here
+            // Example structure (replace with your actual config):
+            // apiKey: "YOUR_API_KEY",
+            // authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
+            // projectId: "YOUR_PROJECT_ID",
+            // storageBucket: "YOUR_PROJECT_ID.appspot.com",
+            // messagingSenderId: "YOUR_SENDER_ID",
+            // appId: "YOUR_APP_ID"
+        };
+
+        // --- Initialize Firebase Services ---
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        // --- Owner ID for Write Access Control (IMPORTANT: Replace with your actual UID) ---
+        // You will find your UID in Firebase Console -> Authentication -> Users after you sign in with Google.
+        const OWNER_UID = "YOUR_OWNER_UID_HERE"; // <<< REPLACE THIS WITH YOUR ACTUAL OWNER UID
+        let currentUserId = null;
+        let isOwner = false;
+
+        // --- Firestore Security Rules (Copy & Paste these into your Firebase Console -> Firestore Database -> Rules) ---
+        /*
+        rules_version = '2';
+        service cloud.firestore {
+          match /databases/{database}/documents {
+            // Publicly readable data (e.g., current simulation state for observers)
+            match /artifacts/{appId}/public/simulationState/{simulationId} {
+              allow read;
+              // Only the owner can write to the main simulation state
+              allow write: if request.auth != null && request.auth.uid == "$(OWNER_UID)";
+            }
+
+            // Private user data (if you later want per-user saves)
+            match /artifacts/{appId}/users/{userId}/{documents=**} {
+              allow read, write: if request.auth != null && request.auth.uid == userId;
+            }
+          }
+        }
+        */
+
+        // --- Global Simulation Variables ---
+        const canvas = document.getElementById('simulationCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // Simulation parameters
+        let populationSize = 50; // Number of ProtoCells
+        let particleCount = 100; // Number of original elements (food)
+        let generationTimeLimit = 10; // Seconds per generation
+        let protoCellMetabolismRate = 0.05; // Energy consumed per tick
+        let mutationRate = 0.1; // Probability of gene mutation
+
+        // Simulation state
+        let particles = []; // Array of Particle objects (food)
+        let protoCells = []; // Array of ProtoCell objects
+        let currentGeneration = 0; // Current generation in the active run
+        let totalGenerationsCompleted = 0; // Cumulative total generations processed
+        let totalSimSeconds = 0; // Cumulative total simulation time in seconds
+
+        let isRunning = false; // Flag if simulation is active
+        let animationFrameId; // For requestAnimationFrame
+        let generationTimerInterval; // Interval for tracking time within a generation
+        let currentGenerationSecondsLeft; // Countdown for current generation
+        let lastGenerationFoodConsumed = []; // Store food consumed for prev gen stats
+
+        // UI element references
+        const currentGenDisplay = document.getElementById('currentGenDisplay');
+        const totalGenDisplay = document.getElementById('totalGenDisplay');
+        const timeLeftDisplay = document.getElementById('timeLeftDisplay');
+        const aliveProtoCellsDisplay = document.getElementById('aliveProtoCellsDisplay');
+        const avgFoodDisplay = document.getElementById('avgFoodDisplay');
+        const maxFoodDisplay = document.getElementById('maxFoodDisplay');
+        const totalSimTimeDisplay = document.getElementById('totalSimTimeDisplay');
+        const userIdDisplay = document.getElementById('userIdDisplay');
+        const ownerStatusDisplay = document.getElementById('ownerStatusDisplay');
+
+        const startButton = document.getElementById('startButton');
+        const pauseButton = document.getElementById('pauseButton');
+        const resetButton = document.getElementById('resetButton');
+        const saveButton = document.getElementById('saveButton');
+        const loadButton = document.getElementById('loadButton');
+        const googleSignInButton = document.getElementById('googleSignInButton');
+        const signOutButton = document.getElementById('signOutButton');
+        const messageBox = document.getElementById('messageBox');
+
+        // --- Firebase Authentication Handling ---
+
+        /** Authenticates user with Google. */
+        async function signInWithGoogle() {
+            try {
+                const provider = new GoogleAuthProvider();
+                await signInWithPopup(auth, provider);
+                showMessage("Signed in as owner!", 'success');
+            } catch (error) {
+                console.error("Google Sign-In Error:", error);
+                showMessage(`Sign-in failed: ${error.message}`, 'error');
+            }
+        }
+
+        /** Signs out the current user. */
+        async function signOutUser() {
+            try {
+                await signOut(auth);
+                showMessage("Signed out.", 'info');
+            } catch (error) {
+                console.error("Sign-Out Error:", error);
+                showMessage(`Sign-out failed: ${error.message}`, 'error');
+            }
+        }
+
+        /** Handles authentication state changes. */
+        onAuthStateChanged(auth, async (user) => {
+            if (user) {
+                currentUserId = user.uid;
+                userIdDisplay.textContent = user.uid;
+                isOwner = (user.uid === OWNER_UID);
+                ownerStatusDisplay.textContent = isOwner ? "Owner (Write Access)" : "Observer (Read Only)";
+                googleSignInButton.classList.add('hidden');
+                signOutButton.classList.remove('hidden');
+                saveButton.disabled = !isOwner; // Enable save/load only for owner
+                loadButton.disabled = !isOwner;
+                showMessage(`Welcome, ${isOwner ? 'Owner' : 'Observer'}!`, 'info');
+
+                // If owner, try to load previous state
+                if (isOwner) {
+                    await loadSimulationState();
+                }
+
+            } else {
+                currentUserId = null;
+                isOwner = false;
+                userIdDisplay.textContent = "N/A";
+                ownerStatusDisplay.textContent = "Anonymous (Read Only)";
+                googleSignInButton.classList.remove('hidden');
+                signOutButton.classList.add('hidden');
+                saveButton.disabled = true;
+                loadButton.disabled = true;
+                showMessage("You are viewing as an anonymous observer.", 'info');
+
+                // Sign in anonymously if not already signed in to allow read access
+                // This ensures all users have an auth token for Firestore rules
+                try {
+                    await signInAnonymously(auth);
+                } catch (error) {
+                    console.error("Anonymous Sign-In Error:", error);
+                    showMessage(`Error signing in anonymously: ${error.message}. Simulation data may not load.`, 'error');
+                }
+            }
+        });
+
+        // --- Helper Functions (UI and Drawing) ---
+
+        /**
+         * Displays a message in the custom message box.
+         * @param {string} message - The message text to display.
+         * @param {string} type - The type of message ('info', 'error', 'success') to determine styling.
+         */
+        function showMessage(message, type = 'info') {
+            messageBox.textContent = message;
+            messageBox.className = `mt-6 p-4 rounded-md text-center shadow-md`;
+            if (type === 'info') {
+                messageBox.classList.add('bg-blue-700', 'text-blue-100');
+            } else if (type === 'error') {
+                messageBox.classList.add('bg-red-700', 'text-red-100');
+            } else if (type === 'success') {
+                messageBox.classList.add('bg-green-700', 'text-green-100');
+            }
+            messageBox.classList.remove('hidden');
+        }
+
+        /** Hides the custom message box. */
+        function hideMessageBox() {
+            messageBox.classList.add('hidden');
+        }
+
+        /** Updates all display elements on the UI. */
+        function updateDisplay() {
+            currentGenDisplay.textContent = currentGeneration;
+            totalGenDisplay.textContent = totalGenerationsCompleted;
+            timeLeftDisplay.textContent = `${currentGenerationSecondsLeft}s`;
+            totalSimTimeDisplay.textContent = `${totalSimSeconds}s`;
+
+            const aliveCount = protoCells.filter(pc => pc.energy > 0).length;
+            aliveProtoCellsDisplay.textContent = `${aliveCount}/${populationSize}`;
+
+            if (lastGenerationFoodConsumed.length > 0) {
+                const totalFood = lastGenerationFoodConsumed.reduce((sum, f) => sum + f, 0);
+                const avgFood = totalFood / lastGenerationFoodConsumed.length;
+                const maxFood = Math.max(...lastGenerationFoodConsumed);
+                avgFoodDisplay.textContent = avgFood.toFixed(2);
+                maxFoodDisplay.textContent = maxFood;
+            } else {
+                avgFoodDisplay.textContent = '0.00';
+                maxFoodDisplay.textContent = '0';
+            }
+            // userIdDisplay and ownerStatusDisplay are updated by onAuthStateChanged
+        }
+
+        /** Resizes canvas to fit its container responsively. */
+        function resizeCanvas() {
+            canvas.width = canvas.offsetWidth;
+            canvas.height = Math.min(400, window.innerHeight * 0.6); // Adapt height slightly
+            draw(); // Redraw content after resize
+        }
+
+        /** Draws all entities on the canvas. */
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height); // Clear canvas
+
+            // Draw Particles (Food)
+            particles.forEach(p => {
+                ctx.fillStyle = p.color;
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, 3, 0, Math.PI * 2);
+                ctx.fill();
+            });
+
+            // Draw ProtoCells
+            protoCells.forEach(pc => {
+                if (pc.energy <= 0) return; // Don't draw dead proto-cells
+
+                const energyRatio = pc.energy / pc.maxEnergy;
+                const color = `rgba(${Math.floor((1 - energyRatio) * 255)}, ${Math.floor(energyRatio * 255)}, 0, 0.8)`; // Red to Green based on energy
+                ctx.fillStyle = color;
+                ctx.beginPath();
+                ctx.arc(pc.x, pc.y, 6, 0, Math.PI * 2); // ProtoCell circle
+                ctx.fill();
+
+                // Draw direction indicator
+                ctx.strokeStyle = 'white';
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                const angle = Math.atan2(pc.vy, pc.vx);
+                ctx.moveTo(pc.x, pc.y);
+                ctx.lineTo(pc.x + Math.cos(angle) * 10, pc.y + Math.sin(angle) * 10);
+                ctx.stroke();
+            });
+        }
+
+        // --- Entity Classes ---
+
+        class Particle {
+            constructor(type, x, y) {
+                this.type = type; // e.g., 'food', 'repel', 'bond'
+                this.x = x || Math.random() * canvas.width;
+                this.y = y || Math.random() * canvas.height;
+                this.value = 1; // Energy value if consumed
+                this.color = '#00FF00'; // Default green for food particles
+                if (this.type === 'repel') this.color = '#FF0000'; // Example for other particle types
+                if (this.type === 'bond') this.color = '#0000FF'; // Example for other particle types
+            }
+        }
+
+        class ProtoCell {
+            constructor(id, genes, composition) {
+                this.id = id;
+                this.x = Math.random() * canvas.width;
+                this.y = Math.random() * canvas.height;
+                this.vx = (Math.random() - 0.5) * 2;
+                this.vy = (Math.random() - 0.5) * 2;
+                this.maxEnergy = 100;
+                this.energy = this.maxEnergy;
+                this.foodConsumed = 0;
+
+                // Genes: [speed_multiplier, sensory_range, turning_responsiveness, metabolism_multiplier, preferred_type_index]
+                // Each gene is normalized between 0 and 1
+                this.genes = genes || [
+                    Math.random(), // gene[0]: speed (0-1)
+                    Math.random(), // gene[1]: sensory range (0-1)
+                    Math.random(), // gene[2]: turning responsiveness (0-1)
+                    Math.random(), // gene[3]: metabolism (0-1)
+                ];
+
+                this.composition = composition || []; // Array of Particles that formed this ProtoCell (for detailed vision)
+                this.preferredParticleTypeIndex = Math.floor(this.genes[3] * 3); // Based on a gene for now, e.g., 0=food, 1=repel, 2=bond
+
+                // Derived properties from genes
+                this.speed = 1 + this.genes[0] * 2; // Speed from 1 to 3
+                this.sensoryRange = 50 + this.genes[1] * 100; // Range from 50 to 150
+                this.turnFactor = 0.05 + this.genes[2] * 0.1; // Turn factor from 0.05 to 0.15
+                this.metabolism = protoCellMetabolismRate * (0.5 + this.genes[3]); // Metabolism influenced by gene
+            }
+
+            update() {
+                if (this.energy <= 0) {
+                    this.energy = 0; // Ensure energy doesn't go negative
+                    return; // Dead proto-cells don't move or interact
+                }
+
+                // Energy consumption
+                this.energy -= this.metabolism;
+
+                // --- Simple Decision Logic based on Genes ---
+                let targetX = this.x + this.vx;
+                let targetY = this.y + this.vy;
+
+                // Find nearest particle of preferred type within sensory range
+                let nearestPreferredParticle = null;
+                let minDistance = Infinity;
+
+                for (let i = particles.length - 1; i >= 0; i--) {
+                    const p = particles[i];
+                    // Example: Only prefer 'food' particles for now
+                    if (p.type === 'food') {
+                        const dist = Math.sqrt(Math.pow(this.x - p.x, 2) + Math.pow(this.y - p.y, 2));
+                        if (dist < minDistance && dist < this.sensoryRange) {
+                            minDistance = dist;
+                            nearestPreferredParticle = p;
+                        }
+                    }
+                }
+
+                if (nearestPreferredParticle) {
+                    // Steer towards preferred particle
+                    let dx = nearestPreferredParticle.x - this.x;
+                    let dy = nearestPreferredParticle.y - this.y;
+                    const magnitude = Math.sqrt(dx * dx + dy * dy);
+                    if (magnitude > 0) {
+                        dx /= magnitude;
+                        dy /= magnitude;
+                    }
+
+                    // Apply turning responsiveness
+                    this.vx = (1 - this.turnFactor) * this.vx + this.turnFactor * (dx * this.speed);
+                    this.vy = (1 - this.turnFactor) * this.vy + this.turnFactor * (dy * this.speed);
+                } else {
+                    // Wander if no preferred particle in range (slight random walk)
+                    this.vx += (Math.random() - 0.5) * 0.2;
+                    this.vy += (Math.random() - 0.5) * 0.2;
+                    // Clamp speed
+                    const currentSpeed = Math.sqrt(this.vx * this.vx + this.vy * this.vy);
+                    if (currentSpeed > this.speed) {
+                        this.vx = (this.vx / currentSpeed) * this.speed;
+                        this.vy = (this.vy / currentSpeed) * this.speed;
+                    }
+                }
+
+                // Update position
+                this.x += this.vx;
+                this.y += this.vy;
+
+                // Keep proto-cells within canvas bounds and bounce
+                if (this.x < 0 || this.x > canvas.width) this.vx *= -1;
+                if (this.y < 0 || this.y > canvas.height) this.vy *= -1;
+                this.x = Math.max(0, Math.min(canvas.width, this.x));
+                this.y = Math.max(0, Math.min(canvas.height, this.y));
+
+                // Check for Particle consumption
+                for (let i = particles.length - 1; i >= 0; i--) {
+                    const p = particles[i];
+                    const dist = Math.sqrt(Math.pow(this.x - p.x, 2) + Math.pow(this.y - p.y, 2));
+                    if (dist < 10) { // If close to particle (collision detection)
+                        this.foodConsumed += p.value;
+                        this.energy = Math.min(this.maxEnergy, this.energy + p.value * 20); // Gain energy from particle
+                        particles.splice(i, 1); // Remove consumed particle
+                    }
+                }
+            }
+
+            getFitness() {
+                // Fitness is based on food consumed and energy remaining
+                return this.foodConsumed + (this.energy > 0 ? this.energy * 0.1 : 0);
+            }
+        }
+
+        // --- Core Simulation Logic ---
+
+        /** Initializes the simulation state with new particles and proto-cells. */
+        function initializeSimulation() {
+            // Clear existing entities
+            particles = [];
+            protoCells = [];
+            lastGenerationFoodConsumed = [];
+
+            // Create initial particles (food)
+            for (let i = 0; i < particleCount; i++) {
+                particles.push(new Particle('food'));
+            }
+
+            // Create initial population of proto-cells with random genes
+            for (let i = 0; i < populationSize; i++) {
+                protoCells.push(new ProtoCell(i, null, []));
+            }
+
+            currentGeneration = 0; // Reset for a new simulation run
+            totalGenerationsCompleted = 0;
+            totalSimSeconds = 0;
+            currentGenerationSecondsLeft = generationTimeLimit; // Reset timer
+            updateDisplay();
+            draw();
+        }
+
+        /** Moves to the next generation, evolving proto-cells. */
+        function nextGeneration() {
+            // 1. Evaluate Fitness & Select Parents
+            const livingProtoCells = protoCells.filter(pc => pc.energy > 0);
+            livingProtoCells.sort((a, b) => b.getFitness() - a.getFitness()); // Sort by fitness (descending)
+
+            lastGenerationFoodConsumed = livingProtoCells.map(pc => pc.foodConsumed); // Store for stats
+
+            if (livingProtoCells.length === 0 && currentGeneration > 0) { // Don't reset on initial empty gen
+                showMessage("All ProtoCells died! Resetting simulation.", 'error');
+                resetSimulation();
+                return;
+            }
+
+            const newProtoCells = [];
+            // Elitism: Keep a percentage of the fittest proto-cells
+            const numElites = Math.max(1, Math.floor(populationSize * 0.05)); // Keep at least 1 elite
+            for (let i = 0; i < numElites; i++) {
+                if (livingProtoCells[i]) {
+                    const eliteGenes = [...livingProtoCells[i].genes];
+                    const eliteProtoCell = new ProtoCell(newProtoCells.length, eliteGenes, [...livingProtoCells[i].composition]);
+                    eliteProtoCell.energy = eliteProtoCell.maxEnergy; // Re-energize elites
+                    eliteProtoCell.foodConsumed = 0;
+                    newProtoCells.push(eliteProtoCell);
+                }
+            }
+
+            // 2. Reproduction and Mutation
+            const totalFitness = livingProtoCells.reduce((sum, pc) => sum + pc.getFitness(), 0);
+
+            while (newProtoCells.length < populationSize) {
+                const parent1 = selectParent(livingProtoCells, totalFitness);
+                const parent2 = selectParent(livingProtoCells, totalFitness); // Simple asexual reproduction for now
+
+                if (!parent1 || !parent2) { // Fallback in case of selection issues
+                    newProtoCells.push(new ProtoCell(newProtoCells.length, null, [])); // Add random proto-cell
+                    continue;
+                }
+
+                // Crossover (single point for simplicity between parent1 and parent2 genes)
+                const offspringGenes = crossover(parent1.genes, parent2.genes);
+
+                // Mutation
+                mutate(offspringGenes);
+
+                const newProtoCell = new ProtoCell(newProtoCells.length, offspringGenes, []); // New composition if needed
+                newProtoCell.energy = newProtoCell.maxEnergy; // Full energy for new generation
+                newProtoCells.push(newProtoCell);
+            }
+
+            protoCells = newProtoCells; // Replace old population
+            populateParticles(); // Replenish food particles for the new generation
+
+            currentGeneration++;
+            totalGenerationsCompleted++; // Cumulative total increment
+            currentGenerationSecondsLeft = generationTimeLimit; // Reset timer for new gen
+            updateDisplay();
+            draw();
+        }
+
+        /** Selects a parent using roulette wheel selection. */
+        function selectParent(population, totalFitness) {
+            if (totalFitness <= 0 || population.length === 0) {
+                // If no fitness or no living population, pick a random agent to avoid errors
+                return population[Math.floor(Math.random() * population.length)];
+            }
+            let rand = Math.random() * totalFitness;
+            for (let i = 0; i < population.length; i++) {
+                rand -= population[i].getFitness();
+                if (rand <= 0) {
+                    return population[i];
+                }
+            }
+            return population[population.length - 1]; // Fallback in case of floating point errors
+        }
+
+        /** Performs single-point crossover on two parent gene arrays. */
+        function crossover(genes1, genes2) {
+            const offspringGenes = [];
+            const crossoverPoint = Math.floor(Math.random() * genes1.length);
+            for (let i = 0; i < genes1.length; i++) {
+                if (i < crossoverPoint) {
+                    offspringGenes.push(genes1[i]);
+                } else {
+                    offspringGenes.push(genes2[i]);
+                }
+            }
+            return offspringGenes;
+        }
+
+        /** Applies random mutation to genes. */
+        function mutate(genes) {
+            for (let i = 0; i < genes.length; i++) {
+                if (Math.random() < mutationRate) {
+                    genes[i] += (Math.random() - 0.5) * 0.5; // Small random change (-0.25 to 0.25)
+                    genes[i] = Math.max(0, Math.min(1, genes[i])); // Clamp gene values between 0 and 1
+                }
+            }
+        }
+
+        /** Replenishes particles (food) for the environment. */
+        function populateParticles() {
+            particles = []; // Clear existing particles
+            for (let i = 0; i < particleCount; i++) {
+                particles.push(new Particle('food')); // All are food particles for now
+            }
+        }
+
+        // --- Firebase Data Operations ---
+
+        const SIM_STATE_DOC_ID = "mainSimulationState"; // Fixed ID for the main simulation state document
+
+        /** Saves the current simulation state to Firestore. */
+        async function saveSimulationState() {
+            if (!isOwner) {
+                showMessage("Only the owner can save the simulation state.", 'error');
+                return;
+            }
+            if (currentUserId === "YOUR_OWNER_UID_HERE" || !currentUserId) { // Prevent saving if OWNER_UID is placeholder
+                showMessage("Please update OWNER_UID in the code and sign in with your owner account to save.", 'error');
+                return;
+            }
+
+            try {
+                // Serialize protoCells data (genes, position, energy, etc.)
+                const serializedProtoCells = protoCells.map(pc => ({
+                    id: pc.id,
+                    x: pc.x,
+                    y: pc.y,
+                    energy: pc.energy,
+                    foodConsumed: pc.foodConsumed,
+                    genes: pc.genes,
+                    // composition: pc.composition.map(p => ({type: p.type, x: p.x, y: p.y, value: p.value})) // Only if composition is needed to be saved
+                }));
+
+                const dataToSave = {
+                    currentGeneration: currentGeneration,
+                    totalGenerationsCompleted: totalGenerationsCompleted,
+                    totalSimSeconds: totalSimSeconds,
+                    timestamp: new Date(),
+                    protoCells: serializedProtoCells,
+                    // You might want to save particle positions if they are persistent,
+                    // but for now, they are repopulated each generation.
+                    // particles: particles.map(p => ({type: p.type, x: p.x, y: p.y, value: p.value}))
+                };
+
+                // Use the public collection path for the main simulation state
+                const simDocRef = doc(db, `artifacts/${appId}/public/simulationState`, SIM_STATE_DOC_ID);
+                await setDoc(simDocRef, dataToSave);
+                showMessage("Simulation state saved successfully!", 'success');
+            } catch (error) {
+                console.error("Error saving simulation state:", error);
+                showMessage(`Error saving state: ${error.message}. Check console and Firebase rules.`, 'error');
+            }
+        }
+
+        /** Loads the simulation state from Firestore. */
+        async function loadSimulationState() {
+            // Read access is allowed for everyone by rules, but only owner can load to affect simulation state
+            if (!isOwner && auth.currentUser && auth.currentUser.isAnonymous) {
+                showMessage("Observers can view the current state but cannot load a past save to run.", 'info');
+                return;
+            }
+            if (!isOwner) { // Double-check for non-owner trying to load
+                 showMessage("Please sign in as the owner to load a past simulation state.", 'error');
+                 return;
+            }
+
+
+            try {
+                const simDocRef = doc(db, `artifacts/${appId}/public/simulationState`, SIM_STATE_DOC_ID);
+                const docSnap = await getDoc(simDocRef);
+
+                if (docSnap.exists()) {
+                    const data = docSnap.data();
+
+                    // Deserialize protoCells data
+                    const loadedProtoCells = data.protoCells.map(pcData => {
+                        const pc = new ProtoCell(pcData.id, pcData.genes, pcData.composition || []);
+                        pc.x = pcData.x;
+                        pc.y = pcData.y;
+                        pc.energy = pcData.energy;
+                        pc.foodConsumed = pcData.foodConsumed;
+                        return pc;
+                    });
+
+                    // Restore simulation state
+                    currentGeneration = data.currentGeneration;
+                    totalGenerationsCompleted = data.totalGenerationsCompleted;
+                    totalSimSeconds = data.totalSimSeconds;
+                    protoCells = loadedProtoCells;
+
+                    // Repopulate particles for the new generation
+                    populateParticles();
+                    updateDisplay();
+                    draw();
+                    showMessage("Simulation state loaded successfully!", 'success');
+                } else {
+                    showMessage("No saved simulation state found.", 'info');
+                    initializeSimulation(); // Start a new one if no save exists
+                }
+            } catch (error) {
+                console.error("Error loading simulation state:", error);
+                showMessage(`Error loading state: ${error.message}. Check console and Firebase rules.`, 'error');
+                initializeSimulation(); // Fallback to new simulation on error
+            }
+        }
+
+
+        // --- Simulation Control Functions ---
+
+        /** Main animation loop. Updates entities and draws. */
+        function animate() {
+            if (!isRunning) return; // Stop animation if simulation is paused/stopped
+
+            // Update all proto-cells
+            protoCells.forEach(pc => pc.update());
+
+            draw(); // Redraw everything
+
+            animationFrameId = requestAnimationFrame(animate); // Loop the animation
+        }
+
+        /** Manages the progress of a single generation over time. */
+        function startGenerationTimer() {
+            // Reset timer only if it's the start of a new generation countdown
+            if (currentGenerationSecondsLeft <= 0 || !generationTimerInterval) {
+                 currentGenerationSecondsLeft = generationTimeLimit;
+            }
+
+            timeLeftDisplay.textContent = `${currentGenerationSecondsLeft}s`;
+
+            if (generationTimerInterval) {
+                clearInterval(generationTimerInterval); // Clear any existing timer
+            }
+
+            generationTimerInterval = setInterval(() => {
+                currentGenerationSecondsLeft--;
+                totalSimSeconds++; // Increment total simulation time every second
+                updateDisplay();
+
+                if (currentGenerationSecondsLeft <= 0) {
+                    clearInterval(generationTimerInterval); // End this generation's timer
+                    nextGeneration(); // Move to the next generation
+                    startGenerationTimer(); // Start timer for the next generation
+                }
+            }, 1000); // Update every 1 second
+        }
+
+
+        /** Starts or resumes the main simulation. */
+        function startSimulation() {
+            if (isRunning) return;
+
+            isRunning = true;
+            startButton.disabled = true;
+            pauseButton.disabled = false;
+            resetButton.disabled = true; // Disable reset while running
+
+            hideMessageBox();
+            showMessage("Simulation running...", 'info');
+
+            // If starting a fresh run (e.g., after reset or initial load)
+            if (currentGeneration === 0 && totalGenerationsCompleted === 0) {
+                 initializeSimulation(); // Set up initial state
+            }
+            startGenerationTimer(); // Start the timer for the first/current generation
+            animationFrameId = requestAnimationFrame(animate); // Start the visual animation loop
+        }
+
+        /** Pauses the simulation. */
+        function pauseSimulation() {
+            if (!isRunning) return;
+
+            isRunning = false;
+            cancelAnimationFrame(animationFrameId); // Stop animation loop
+            clearInterval(generationTimerInterval); // Stop generation timer
+
+            startButton.disabled = false;
+            pauseButton.disabled = true;
+            resetButton.disabled = false;
+            showMessage("Simulation paused.", 'info');
+        }
+
+        /** Resets the simulation to its initial state. */
+        function resetSimulation() {
+            pauseSimulation(); // Ensure simulation is stopped before resetting
+            currentGeneration = 0;
+            totalGenerationsCompleted = 0;
+            totalSimSeconds = 0;
+            lastGenerationFoodConsumed = [];
+
+            initializeSimulation(); // Re-initialize all entities and state
+            updateDisplay(); // Update UI with reset values
+            draw(); // Draw initial state
+
+            startButton.disabled = false;
+            pauseButton.disabled = true;
+            resetButton.disabled = false;
+            showMessage("Simulation fully reset. Ready to begin a new journey.", 'info');
+        }
+
+
+        // --- Event Listeners and Initial Setup ---
+
+        // Add event listeners to control buttons
+        startButton.addEventListener('click', startSimulation);
+        pauseButton.addEventListener('click', pauseSimulation);
+        resetButton.addEventListener('click', resetSimulation);
+        saveButton.addEventListener('click', saveSimulationState);
+        loadButton.addEventListener('click', loadSimulationState);
+        googleSignInButton.addEventListener('click', signInWithGoogle);
+        signOutButton.addEventListener('click', signOutUser);
+
+
+        // Handle canvas resizing
+        window.addEventListener('resize', resizeCanvas);
+
+        // Initial setup when the page loads
+        window.onload = () => {
+            resizeCanvas(); // Set initial canvas size
+            // Initial state will be loaded or initialized by onAuthStateChanged
+            // which handles anonymous login or owner login
+        };
+    </script>
+</body>
+</html>
